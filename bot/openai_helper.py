@@ -649,6 +649,7 @@ class OpenAIHelper:
         :param messages: the messages to send
         :return: the number of tokens required
         """
+        return len(messages)
         model = self.config['model']
         try:
             encoding = tiktoken.encoding_for_model(model)
