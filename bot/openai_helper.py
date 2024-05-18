@@ -649,8 +649,9 @@ class OpenAIHelper:
         :param messages: the messages to send
         :return: the number of tokens required
         """
-        return len(messages)
         model = self.config['model']
+        if model not in GPT_ALL_MODELS:
+            return len(messages)
         try:
             encoding = tiktoken.encoding_for_model(model)
         except KeyError:
