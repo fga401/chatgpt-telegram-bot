@@ -1,7 +1,8 @@
 ### usage: ./run.sh <.env file path>
 project_path="$(dirname "$(readlink -f "$0")")"
-source "$project_path/venv/bin/activate"
+docker build -t chatgpt-telegram-bot "$project_path"
+config=".env"
 if [ -n "$1" ]; then
-  mv "$1" "$project_path/.env"
+  config="$1"
 fi
-python3 "$project_path/bot/main.py"
+docker run -d --rm --env-file "$config" chatgpt-telegram-bot
