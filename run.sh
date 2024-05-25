@@ -5,4 +5,4 @@ config=".env"
 if [ -n "$1" ]; then
   config="$1"
 fi
-docker run -d --rm --env-file "$config" chatgpt-telegram-bot
+docker run -d --rm --env-file "$config" -l gpt chatgpt-telegram-bot
