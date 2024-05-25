@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import logging
 import os
-import io
-
 from uuid import uuid4
+
+from PIL import Image
+from pydub import AudioSegment
 from telegram import BotCommandScopeAllGroupChats, Update, constants
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton, InlineQueryResultArticle
 from telegram import InputTextMessageContent, BotCommand
@@ -13,15 +15,12 @@ from telegram.error import RetryAfter, TimedOut, BadRequest
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, \
     filters, InlineQueryHandler, CallbackQueryHandler, Application, ContextTypes, CallbackContext
 
-from pydub import AudioSegment
-from PIL import Image
-
-from utils import is_group_chat, get_thread_id, message_text, wrap_with_indicator, split_into_chunks, \
-    edit_message_with_retry, get_stream_cutoff_values, is_allowed, get_remaining_budget, is_admin, is_within_budget, \
-    get_reply_to_message_id, add_chat_request_to_usage_tracker, error_handler, is_direct_result, handle_direct_result, \
-    cleanup_intermediate_files
 from openai_helper import OpenAIHelper, localized_text
 from usage_tracker import UsageTracker
+from utils import is_group_chat, get_thread_id, message_text, wrap_with_indicator, split_into_chunks, \
+    edit_message_with_retry, get_stream_cutoff_values, is_allowed, get_remaining_budget, is_within_budget, \
+    get_reply_to_message_id, add_chat_request_to_usage_tracker, error_handler, is_direct_result, handle_direct_result, \
+    cleanup_intermediate_files
 
 
 class ChatGPTTelegramBot:
@@ -107,14 +106,14 @@ class ChatGPTTelegramBot:
         chat_messages, chat_token_length = self.openai.get_conversation_stats(chat_id)
         remaining_budget = get_remaining_budget(self.config, self.usage, update)
         bot_language = self.config['bot_language']
-        
+
         text_current_conversation = (
             f"*{localized_text('stats_conversation', bot_language)[0]}*:\n"
             f"{chat_messages} {localized_text('stats_conversation', bot_language)[1]}\n"
             f"{chat_token_length} {localized_text('stats_conversation', bot_language)[2]}\n"
             "----------------------------\n"
         )
-        
+
         # Check if image generation is enabled and, if so, generate the image statistics for today
         text_today_images = ""
         if self.config.get('enable_image_generation', False):
@@ -127,7 +126,7 @@ class ChatGPTTelegramBot:
         text_today_tts = ""
         if self.config.get('enable_tts_generation', False):
             text_today_tts = f"{characters_today} {localized_text('stats_tts', bot_language)}\n"
-        
+
         text_today = (
             f"*{localized_text('usage_today', bot_language)}:*\n"
             f"{tokens_today} {localized_text('stats_tokens', bot_language)}\n"
@@ -139,7 +138,7 @@ class ChatGPTTelegramBot:
             f"{localized_text('stats_total', bot_language)}{current_cost['cost_today']:.2f}\n"
             "----------------------------\n"
         )
-        
+
         text_month_images = ""
         if self.config.get('enable_image_generation', False):
             text_month_images = f"{images_month} {localized_text('stats_images', bot_language)}\n"
@@ -151,7 +150,7 @@ class ChatGPTTelegramBot:
         text_month_tts = ""
         if self.config.get('enable_tts_generation', False):
             text_month_tts = f"{characters_month} {localized_text('stats_tts', bot_language)}\n"
-        
+
         # Check if image generation is enabled and, if so, generate the image statistics for the month
         text_month = (
             f"*{localized_text('usage_month', bot_language)}:*\n"
@@ -228,10 +227,18 @@ class ChatGPTTelegramBot:
         chat_id = update.effective_chat.id
         reset_content = message_text(update.message)
         self.openai.reset_chat_history(chat_id=chat_id, content=reset_content)
-        await update.effective_message.reply_text(
-            message_thread_id=get_thread_id(update),
-            text=localized_text('reset_done', self.config['bot_language'])
-        )
+        if self.config['current_chat_mode']:
+            chat_mode = self.config['current_chat_mode']
+            await context.bot.send_message(
+                update.callback_query.message.chat.id,
+                f"{self.config['chat_modes'][chat_mode]['welcome_message']}",
+                parse_mode=constants.ParseMode.HTML
+            )
+        else:
+            await update.effective_message.reply_text(
+                message_thread_id=get_thread_id(update),
+                text=localized_text('reset_done', self.config['bot_language'])
+            )
 
     async def image(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """
@@ -468,12 +475,11 @@ class ChatGPTTelegramBot:
             else:
                 trigger_keyword = self.config['group_trigger_keyword']
                 if (prompt is None and trigger_keyword != '') or \
-                   (prompt is not None and not prompt.lower().startswith(trigger_keyword.lower())):
+                        (prompt is not None and not prompt.lower().startswith(trigger_keyword.lower())):
                     logging.info('Vision coming from group chat with wrong keyword, ignoring...')
                     return
-        
+
         image = update.message.effective_attachment[-1]
-        
 
         async def _execute():
             bot_language = self.config['bot_language']
@@ -492,14 +498,14 @@ class ChatGPTTelegramBot:
                     parse_mode=constants.ParseMode.MARKDOWN
                 )
                 return
-            
+
             # convert jpg from telegram to png as understood by openai
 
             temp_file_png = io.BytesIO()
 
             try:
                 original_image = Image.open(temp_file)
-                
+
                 original_image.save(temp_file_png, format='PNG')
                 logging.info(f'New vision request received from user {update.message.from_user.name} '
                              f'(id: {update.message.from_user.id})')
@@ -511,8 +517,6 @@ class ChatGPTTelegramBot:
                     reply_to_message_id=get_reply_to_message_id(self.config, update),
                     text=localized_text('media_type_fail', bot_language)
                 )
-            
-            
 
             user_id = update.message.from_user.id
             if user_id not in self.usage:
@@ -597,12 +601,11 @@ class ChatGPTTelegramBot:
                     if tokens != 'not_finished':
                         total_tokens = int(tokens)
 
-                
+
             else:
 
                 try:
                     interpretation, total_tokens = await self.openai.interpret_image(chat_id, temp_file_png, prompt=prompt)
-
 
                     try:
                         await update.effective_message.reply_text(
@@ -1044,6 +1047,141 @@ class ChatGPTTelegramBot:
         await application.bot.set_my_commands(self.group_commands, scope=BotCommandScopeAllGroupChats())
         await application.bot.set_my_commands(self.commands)
 
+    async def show_chat_modes_handle(self, update: Update, context: CallbackContext):
+        if not await is_allowed(self.config, update, context):
+            logging.warning(f'User {update.message.from_user.name} (id: {update.message.from_user.id}) '
+                            'is not allowed to change prompt')
+            await self.send_disallowed_message(update, context)
+
+        text, reply_markup = self.get_chat_mode_menu(0)
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode=constants.ParseMode.HTML)
+
+    def get_chat_mode_menu(self, page_index: int):
+        n_chat_modes_per_page = self.config['n_chat_modes_per_page']
+        chat_modes = self.config['chat_modes']
+        text = f"Select <b>chat mode</b> ({len(chat_modes)} modes available):"
+
+        # buttons
+        chat_mode_keys = list(chat_modes.keys())
+        page_chat_mode_keys = chat_mode_keys[page_index * n_chat_modes_per_page:(page_index + 1) * n_chat_modes_per_page]
+
+        keyboard = []
+        for chat_mode_key in page_chat_mode_keys:
+            name = chat_modes[chat_mode_key]["name"]
+            keyboard.append([InlineKeyboardButton(name, callback_data=f"set_chat_mode|{chat_mode_key}")])
+
+        # pagination
+        if len(chat_mode_keys) > n_chat_modes_per_page:
+            is_first_page = (page_index == 0)
+            is_last_page = ((page_index + 1) * n_chat_modes_per_page >= len(chat_mode_keys))
+
+            if is_first_page:
+                keyboard.append([
+                    InlineKeyboardButton("»", callback_data=f"show_chat_modes|{page_index + 1}")
+                ])
+            elif is_last_page:
+                keyboard.append([
+                    InlineKeyboardButton("«", callback_data=f"show_chat_modes|{page_index - 1}"),
+                ])
+            else:
+                keyboard.append([
+                    InlineKeyboardButton("«", callback_data=f"show_chat_modes|{page_index - 1}"),
+                    InlineKeyboardButton("»", callback_data=f"show_chat_modes|{page_index + 1}")
+                ])
+
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        return text, reply_markup
+
+    async def show_chat_modes_callback_handle(self, update: Update, context: CallbackContext):
+        if not await is_allowed(self.config, update, context):
+            logging.warning(f'User {update.message.from_user.name} (id: {update.message.from_user.id}) '
+                            'is not allowed to change prompt')
+            await self.send_disallowed_message(update, context)
+
+        query = update.callback_query
+        await query.answer()
+
+        page_index = int(query.data.split("|")[1])
+        if page_index < 0:
+            return
+
+        text, reply_markup = self.get_chat_mode_menu(page_index)
+        try:
+            await query.edit_message_text(text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+        except BadRequest as e:
+            if str(e).startswith("Message is not modified"):
+                pass
+
+    async def set_chat_mode_handle(self, update: Update, context: CallbackContext):
+        if not await is_allowed(self.config, update, context):
+            logging.warning(f'User {update.message.from_user.name} (id: {update.message.from_user.id}) '
+                            'is not allowed to change prompt')
+            await self.send_disallowed_message(update, context)
+
+        query = update.callback_query
+        await query.answer()
+
+        chat_mode = query.data.split("|")[1]
+        self.config['current_chat_mode'] = chat_mode
+        self.openai.config['assistant_prompt'] = self.config['chat_modes'][chat_mode]['prompt_start']
+
+        chat_id = update.effective_chat.id
+        self.openai.reset_chat_history(chat_id=chat_id)
+        await context.bot.send_message(
+            update.callback_query.message.chat.id,
+            f"{self.config['chat_modes'][chat_mode]['welcome_message']}",
+            parse_mode=constants.ParseMode.HTML
+        )
+
+    async def models_handle(self, update: Update, context: CallbackContext):
+        if not await is_allowed(self.config, update, context):
+            logging.warning(f'User {update.message.from_user.name} (id: {update.message.from_user.id}) '
+                            'is not allowed to change model')
+            await self.send_disallowed_message(update, context)
+
+        text, reply_markup = self.get_models_menu(update, context)
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode=constants.ParseMode.HTML)
+
+    def get_models_menu(self, update: Update, context: CallbackContext):
+        current_model = self.openai.config['model']
+        if not self.config['models']:
+            await update.message.reply_text(
+                localized_text('models_not_available', self.config['bot_language']),
+                parse_mode=constants.ParseMode.MARKDOWN,
+            )
+        text = localized_text('select_model', self.config['bot_language'])
+        # buttons to choose models
+        buttons = []
+        for model_key in self.config['models']:
+            title = model_key
+            if model_key == current_model:
+                title = "✅ " + title
+            buttons.append(
+                [InlineKeyboardButton(title, callback_data=f"set_models|{model_key}")]
+            )
+        reply_markup = InlineKeyboardMarkup(buttons)
+        return text, reply_markup
+
+    async def set_models_handle(self, update: Update, context: CallbackContext):
+        if not await is_allowed(self.config, update, context):
+            logging.warning(f'User {update.message.from_user.name} (id: {update.message.from_user.id}) '
+                            'is not allowed to change model')
+            await self.send_disallowed_message(update, context)
+
+        query = update.callback_query
+        await query.answer()
+
+        _, model_key = query.data.split("|")
+        self.openai.config['model'] = model_key
+        self.openai.config.update(self.config['models'][model_key])
+        text, reply_markup = self.get_models_menu(update, context)
+        try:
+            await query.edit_message_text(text, reply_markup=reply_markup, parse_mode=constants.ParseMode.HTML)
+        except BadRequest as e:
+            if str(e).startswith("Message is not modified"):
+                pass
+
     def run(self):
         """
         Runs the bot indefinitely until the user presses Ctrl+C
@@ -1056,6 +1194,8 @@ class ChatGPTTelegramBot:
             .concurrent_updates(True) \
             .build()
 
+        application.add_handler(CommandHandler("models", self.models_handle))
+        application.add_handler(CommandHandler("prompt", self.show_chat_modes_handle))
         application.add_handler(CommandHandler('reset', self.reset))
         application.add_handler(CommandHandler('help', self.help))
         application.add_handler(CommandHandler('image', self.image))
@@ -1063,6 +1203,9 @@ class ChatGPTTelegramBot:
         application.add_handler(CommandHandler('start', self.help))
         application.add_handler(CommandHandler('stats', self.stats))
         application.add_handler(CommandHandler('resend', self.resend))
+        application.add_handler(CallbackQueryHandler(self.show_chat_modes_callback_handle, pattern="^show_chat_modes"))
+        application.add_handler(CallbackQueryHandler(self.set_chat_mode_handle, pattern="^set_chat_mode"))
+        application.add_handler(CallbackQueryHandler(self.set_models_handle, pattern="^set_models"))
         application.add_handler(CommandHandler(
             'chat', self.prompt, filters=filters.ChatType.GROUP | filters.ChatType.SUPERGROUP)
         )

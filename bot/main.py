@@ -1,5 +1,6 @@
 import logging
 import os
+import yaml
 
 from dotenv import load_dotenv
 
@@ -30,6 +31,10 @@ def main():
     model = os.environ.get('OPENAI_MODEL', 'gpt-3.5-turbo')
     functions_available = are_functions_available(model=model)
     max_tokens_default = default_max_tokens(model=model)
+    models = None
+    if os.path.exists(".models.yml"):
+        with open(".models.yml", 'r') as f:
+            models = yaml.safe_load(f)
     openai_config = {
         'api_key': os.environ['OPENAI_API_KEY'],
         'show_usage': os.environ.get('SHOW_USAGE', 'false').lower() == 'true',
@@ -61,6 +66,8 @@ def main():
         'tts_model': os.environ.get('TTS_MODEL', 'tts-1'),
         'tts_voice': os.environ.get('TTS_VOICE', 'alloy'),
     }
+    if model in models:
+        openai_config.update(models[model])
 
     if openai_config['enable_functions'] and not functions_available:
         logging.error(f'ENABLE_FUNCTIONS is set to true, but the model {model} does not support it. '
@@ -73,6 +80,10 @@ def main():
         logging.warning('The environment variable MONTHLY_GUEST_BUDGET is deprecated. '
                         'Please use GUEST_BUDGET with BUDGET_PERIOD instead.')
 
+    chat_modes = None
+    if os.path.exists("chat_modes.yml"):
+        with open("chat_modes.yml", 'r') as f:
+            chat_modes = yaml.safe_load(f)
     telegram_config = {
         'token': os.environ['TELEGRAM_BOT_TOKEN'],
         'admin_user_ids': os.environ.get('ADMIN_USER_IDS', '-'),
@@ -100,6 +111,10 @@ def main():
         'tts_prices': [float(i) for i in os.environ.get('TTS_PRICES', "0.015,0.030").split(",")],
         'transcription_price': float(os.environ.get('TRANSCRIPTION_PRICE', 0.006)),
         'bot_language': os.environ.get('BOT_LANGUAGE', 'en'),
+        'n_chat_modes_per_page': int(os.environ.get('N_CHAT_MODES_PER_PAGE', '5')),
+        'chat_modes': chat_modes,
+        'current_chat_mode': chat_modes['assistant'],
+        'models': models
     }
 
     plugin_config = {

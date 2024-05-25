@@ -1,3 +1,11 @@
+# Forked ChatGPT Telegram Bot
+
+## New features:
+- [ ] Switching prompt
+- [ ] Switching model
+
+_The prompt and model will be shared globally._
+
 # ChatGPT Telegram Bot
 ![python-version](https://img.shields.io/badge/python-3.9-blue.svg)
 [![openai-version](https://img.shields.io/badge/openai-0.27.8-orange.svg)](https://openai.com/)
