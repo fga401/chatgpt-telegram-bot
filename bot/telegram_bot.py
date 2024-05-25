@@ -28,14 +28,14 @@ class ChatGPTTelegramBot:
     Class representing a ChatGPT Telegram Bot.
     """
 
-    def __init__(self, config: dict, openai: OpenAIHelper):
+    def __init__(self, config: dict, openais: dict[str, OpenAIHelper]):
         """
         Initializes the bot with the given configuration and GPT bot object.
         :param config: A dictionary containing the bot configuration
         :param openai: OpenAIHelper object
         """
         self.config = config
-        self.openai = openai
+        self.openais = openais
         bot_language = self.config['bot_language']
         self.commands = [
             BotCommand(command='help', description=localized_text('help_description', bot_language)),
@@ -58,6 +58,10 @@ class ChatGPTTelegramBot:
         self.usage = {}
         self.last_message = {}
         self.inline_queries_cache = {}
+
+    @property
+    def openai(self):
+        return self.openais[self.config['current_model']]
 
     async def help(self, update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
         """
@@ -1124,7 +1128,8 @@ class ChatGPTTelegramBot:
 
         chat_mode = query.data.split("|")[1]
         self.config['current_chat_mode'] = chat_mode
-        self.openai.config['assistant_prompt'] = self.config['chat_modes'][chat_mode]['prompt_start']
+        for openai in self.openais.values():
+            openai.config['assistant_prompt'] = self.config['chat_modes'][chat_mode]['prompt_start']
 
         chat_id = update.effective_chat.id
         self.openai.reset_chat_history(chat_id=chat_id)
@@ -1173,14 +1178,13 @@ class ChatGPTTelegramBot:
         await query.answer()
 
         _, model_key = query.data.split("|")
-        self.openai.config['model'] = model_key
-        self.openai.config.update(self.config['models'][model_key])
-        text, reply_markup = self.get_models_menu(update, context)
+        self.config['current_model'] = model_key
+        chat_id = update.effective_chat.id
+        self.openai.reset_chat_history(chat_id=chat_id)
         try:
-            await query.edit_message_text(text, reply_markup=reply_markup, parse_mode=constants.ParseMode.HTML)
+            await query.delete_message()
         except BadRequest as e:
-            if str(e).startswith("Message is not modified"):
-                pass
+            pass
 
     def run(self):
         """

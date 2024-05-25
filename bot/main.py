@@ -1,3 +1,4 @@
+import copy
 import logging
 import os
 import yaml
@@ -28,30 +29,28 @@ def main():
         exit(1)
 
     # Setup configurations
-    model = os.environ.get('OPENAI_MODEL', 'gpt-3.5-turbo')
-    functions_available = are_functions_available(model=model)
-    max_tokens_default = default_max_tokens(model=model)
     models = None
     if os.path.exists(".models.yml"):
         with open(".models.yml", 'r') as f:
             models = yaml.safe_load(f)
-    openai_config = {
-        'api_key': os.environ['OPENAI_API_KEY'],
+    base_openai_config = {
+        'api_key': os.environ.get('OPENAI_API_KEY', None),
+        'base_url': os.environ.get('OPENAI_BASE_URL', None),
         'show_usage': os.environ.get('SHOW_USAGE', 'false').lower() == 'true',
         'stream': os.environ.get('STREAM', 'true').lower() == 'true',
         'proxy': os.environ.get('PROXY', None) or os.environ.get('OPENAI_PROXY', None),
         'max_history_size': int(os.environ.get('MAX_HISTORY_SIZE', 15)),
         'max_conversation_age_minutes': int(os.environ.get('MAX_CONVERSATION_AGE_MINUTES', 180)),
         'assistant_prompt': os.environ.get('ASSISTANT_PROMPT', 'You are a helpful assistant.'),
-        'max_tokens': int(os.environ.get('MAX_TOKENS', max_tokens_default)),
+        'max_tokens': int(os.environ.get('MAX_TOKENS', 4096)),
         'n_choices': int(os.environ.get('N_CHOICES', 1)),
         'temperature': float(os.environ.get('TEMPERATURE', 1.0)),
         'image_model': os.environ.get('IMAGE_MODEL', 'dall-e-2'),
         'image_quality': os.environ.get('IMAGE_QUALITY', 'standard'),
         'image_style': os.environ.get('IMAGE_STYLE', 'vivid'),
         'image_size': os.environ.get('IMAGE_SIZE', '512x512'),
-        'model': model,
-        'enable_functions': os.environ.get('ENABLE_FUNCTIONS', str(functions_available)).lower() == 'true',
+        'model': os.environ.get('OPENAI_MODEL', 'gpt-3.5-turbo'),
+        'enable_functions': os.environ.get('ENABLE_FUNCTIONS', 'true').lower() == 'true',
         'functions_max_consecutive_calls': int(os.environ.get('FUNCTIONS_MAX_CONSECUTIVE_CALLS', 10)),
         'presence_penalty': float(os.environ.get('PRESENCE_PENALTY', 0.0)),
         'frequency_penalty': float(os.environ.get('FREQUENCY_PENALTY', 0.0)),
@@ -66,13 +65,17 @@ def main():
         'tts_model': os.environ.get('TTS_MODEL', 'tts-1'),
         'tts_voice': os.environ.get('TTS_VOICE', 'alloy'),
     }
-    if model in models:
-        openai_config.update(models[model])
-
-    if openai_config['enable_functions'] and not functions_available:
-        logging.error(f'ENABLE_FUNCTIONS is set to true, but the model {model} does not support it. '
-                        'Please set ENABLE_FUNCTIONS to false or use a model that supports it.')
-        exit(1)
+    if models:
+        openai_configs = {model_key: copy.deepcopy(base_openai_config).update(models[model_key]) for model_key in models}
+    else:
+        openai_configs = {base_openai_config['model']: base_openai_config}
+    for model in openai_configs:
+        openai_config = openai_configs[model]
+        functions_available = are_functions_available(model=model)
+        if openai_config['enable_functions'] and not functions_available:
+            logging.error(f'ENABLE_FUNCTIONS is set to true, but the model {model} does not support it. '
+                          'Please set ENABLE_FUNCTIONS to false or use a model that supports it.')
+            exit(1)
     if os.environ.get('MONTHLY_USER_BUDGETS') is not None:
         logging.warning('The environment variable MONTHLY_USER_BUDGETS is deprecated. '
                         'Please use USER_BUDGETS with BUDGET_PERIOD instead.')
@@ -114,7 +117,8 @@ def main():
         'n_chat_modes_per_page': int(os.environ.get('N_CHAT_MODES_PER_PAGE', '5')),
         'chat_modes': chat_modes,
         'current_chat_mode': chat_modes['assistant'],
-        'models': models
+        'models': models,
+        'current_model': os.environ.get('OPENAI_MODEL', 'gpt-3.5-turbo'),
     }
 
     plugin_config = {
@@ -123,8 +127,8 @@ def main():
 
     # Setup and run ChatGPT and Telegram bot
     plugin_manager = PluginManager(config=plugin_config)
-    openai_helper = OpenAIHelper(config=openai_config, plugin_manager=plugin_manager)
-    telegram_bot = ChatGPTTelegramBot(config=telegram_config, openai=openai_helper)
+    openai_helpers = {model: OpenAIHelper(config=openai_config, plugin_manager=plugin_manager) for model, openai_config in openai_configs.items()}
+    telegram_bot = ChatGPTTelegramBot(config=telegram_config, openai=openai_helpers)
     telegram_bot.run()
 
 
