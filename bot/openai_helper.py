@@ -640,9 +640,10 @@ class OpenAIHelper:
             return base * 31
         if self.config['model'] in GPT_4O_MODELS:
             return base * 31
-        raise NotImplementedError(
-            f"Max tokens for model {self.config['model']} is not implemented yet."
-        )
+        return self.config['max_model_tokens']
+        # raise NotImplementedError(
+        #     f"Max tokens for model {self.config['model']} is not implemented yet."
+        # )
 
     # https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb
     def __count_tokens(self, messages) -> int:

@@ -43,6 +43,7 @@ def main():
         'max_conversation_age_minutes': int(os.environ.get('MAX_CONVERSATION_AGE_MINUTES', 180)),
         'assistant_prompt': os.environ.get('ASSISTANT_PROMPT', 'You are a helpful assistant.'),
         'max_tokens': int(os.environ.get('MAX_TOKENS', 4096)),
+        'max_model_tokens': int(os.environ.get('MAX_MODEL_TOKENS', 4096)),
         'n_choices': int(os.environ.get('N_CHOICES', 1)),
         'temperature': float(os.environ.get('TEMPERATURE', 1.0)),
         'image_model': os.environ.get('IMAGE_MODEL', 'dall-e-2'),

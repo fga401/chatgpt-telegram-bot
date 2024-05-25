@@ -1130,10 +1130,9 @@ class ChatGPTTelegramBot:
 
         chat_id = update.effective_chat.id
         self.openai.reset_chat_history(chat_id=chat_id)
-        await context.bot.send_message(
-            update.callback_query.message.chat.id,
+        await query.edit_message_text(
             f"{self.config['chat_modes'][chat_mode]['welcome_message']}",
-            parse_mode=constants.ParseMode.HTML
+            parse_mode=constants.ParseMode.HTML,
         )
 
     async def models_handle(self, update: Update, context: CallbackContext):
@@ -1172,8 +1171,9 @@ class ChatGPTTelegramBot:
         self.config['current_model'] = model_key
         chat_id = update.effective_chat.id
         self.openai.reset_chat_history(chat_id=chat_id)
+        text, reply_markup = self.get_models_menu()
         try:
-            await query.delete_message()
+            await query.edit_message_text(text, reply_markup=reply_markup, parse_mode=constants.ParseMode.HTML)
         except BadRequest as e:
             pass
 
