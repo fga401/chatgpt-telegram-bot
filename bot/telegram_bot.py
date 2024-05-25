@@ -1144,17 +1144,16 @@ class ChatGPTTelegramBot:
             logging.warning(f'User {update.message.from_user.name} (id: {update.message.from_user.id}) '
                             'is not allowed to change model')
             await self.send_disallowed_message(update, context)
-
-        text, reply_markup = self.get_models_menu(update, context)
-        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode=constants.ParseMode.HTML)
-
-    def get_models_menu(self, update: Update, context: CallbackContext):
-        current_model = self.openai.config['model']
         if not self.config['models']:
             await update.message.reply_text(
                 localized_text('models_not_available', self.config['bot_language']),
                 parse_mode=constants.ParseMode.MARKDOWN,
             )
+        text, reply_markup = self.get_models_menu()
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode=constants.ParseMode.HTML)
+
+    def get_models_menu(self):
+        current_model = self.openai.config['model']
         text = localized_text('select_model', self.config['bot_language'])
         # buttons to choose models
         buttons = []
