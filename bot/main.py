@@ -31,7 +31,7 @@ def main():
     # Setup configurations
     models = None
     if os.path.exists(".models.yml"):
-        with open(".models.yml", 'r') as f:
+        with open(".models.yml", 'r', encoding='utf-8') as f:
             models = yaml.safe_load(f)
     base_openai_config = {
         'api_key': os.environ.get('OPENAI_API_KEY', None),
@@ -65,8 +65,13 @@ def main():
         'tts_model': os.environ.get('TTS_MODEL', 'tts-1'),
         'tts_voice': os.environ.get('TTS_VOICE', 'alloy'),
     }
+    print(models)
     if models:
-        openai_configs = {model_key: copy.deepcopy(base_openai_config).update(models[model_key]) for model_key in models}
+        openai_configs = {}
+        for model_key in models:
+            openai_config = copy.deepcopy(base_openai_config)
+            openai_config.update(models[model_key])
+            openai_configs[model_key] = openai_config
     else:
         openai_configs = {base_openai_config['model']: base_openai_config}
     for model in openai_configs:
@@ -85,7 +90,7 @@ def main():
 
     chat_modes = None
     if os.path.exists("chat_modes.yml"):
-        with open("chat_modes.yml", 'r') as f:
+        with open("chat_modes.yml", 'r', encoding='utf-8') as f:
             chat_modes = yaml.safe_load(f)
     telegram_config = {
         'token': os.environ['TELEGRAM_BOT_TOKEN'],
