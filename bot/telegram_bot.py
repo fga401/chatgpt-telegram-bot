@@ -1118,11 +1118,6 @@ class ChatGPTTelegramBot:
                 pass
 
     async def set_chat_mode_handle(self, update: Update, context: CallbackContext):
-        if not await is_allowed(self.config, update, context):
-            logging.warning(f'User {update.message.from_user.name} (id: {update.message.from_user.id}) '
-                            'is not allowed to change prompt')
-            await self.send_disallowed_message(update, context)
-
         query = update.callback_query
         await query.answer()
 
@@ -1168,11 +1163,6 @@ class ChatGPTTelegramBot:
         return text, reply_markup
 
     async def set_models_handle(self, update: Update, context: CallbackContext):
-        if not await is_allowed(self.config, update, context):
-            logging.warning(f'User {update.message.from_user.name} (id: {update.message.from_user.id}) '
-                            'is not allowed to change model')
-            await self.send_disallowed_message(update, context)
-
         query = update.callback_query
         await query.answer()
 
