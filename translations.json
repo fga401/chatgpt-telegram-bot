@@ -2,6 +2,8 @@
     "en": {
         "help_description":"Show help message",
         "reset_description":"Reset the conversation. Optionally pass high-level instructions (e.g. /reset You are a helpful assistant)",
+        "switch_model":"Switch models.",
+        "switch_prompt":"Switch prompts.",
         "image_description":"Generate image from prompt (e.g. /image cat)",
         "tts_description":"Generate speech from text (e.g. /tts my house)",
         "stats_description":"Get your current usage statistics",
