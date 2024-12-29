@@ -1099,7 +1099,7 @@ class ChatGPTTelegramBot:
         return text, reply_markup
 
     async def show_chat_modes_callback_handle(self, update: Update, context: CallbackContext):
-        if not await is_allowed(self.config, update, context):
+        if not await is_allowed(self.config, update, context, is_callback=True):
             logging.warning(f'User {update.message.from_user.name} (id: {update.message.from_user.id}) '
                             'is not allowed to change prompt')
             await self.send_disallowed_message(update, context)
@@ -1113,7 +1113,11 @@ class ChatGPTTelegramBot:
 
         text, reply_markup = self.get_chat_mode_menu(page_index)
         try:
-            await query.edit_message_text(text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+            await query.edit_message_text(
+                text,
+                reply_markup=reply_markup,
+                parse_mode=constants.ParseMode.HTML
+            )
         except BadRequest as e:
             if str(e).startswith("Message is not modified"):
                 pass

@@ -148,14 +148,19 @@ async def error_handler(_: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     logging.error(f'Exception while handling an update: {context.error}')
 
 
-async def is_allowed(config, update: Update, context: CallbackContext, is_inline=False) -> bool:
+async def is_allowed(config, update: Update, context: CallbackContext, is_inline=False, is_callback=False) -> bool:
     """
     Checks if the user is allowed to use the bot.
     """
+    assert not(is_inline and is_callback)
     if config['allowed_user_ids'] == '*':
         return True
-
-    user_id = update.inline_query.from_user.id if is_inline else update.message.from_user.id
+    if is_inline:
+        user_id = update.inline_query.from_user.id
+    elif is_callback:
+        user_id = update.callback_query.from_user.id
+    else:
+        user_id = update.message.from_user.id
     if is_admin(config, user_id):
         return True
     name = update.inline_query.from_user.name if is_inline else update.message.from_user.name
